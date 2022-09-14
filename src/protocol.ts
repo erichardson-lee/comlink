@@ -26,10 +26,16 @@ export interface PostMessageWithOrigin {
   ): void;
 }
 
-export interface Endpoint extends EventSource {
+export interface Endpoint extends Closable, Startable, EventSource {
   postMessage(message: any, transfer?: Transferable[]): void;
+}
 
+export interface Startable {
   start?: () => void;
+}
+
+export interface Closable {
+  close?: () => void;
 }
 
 export const enum WireValueType {

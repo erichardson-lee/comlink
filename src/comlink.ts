@@ -5,6 +5,7 @@
  */
 
 import {
+  Closable,
   Endpoint,
   EventSource,
   Message,
@@ -12,7 +13,7 @@ import {
   PostMessageWithOrigin,
   WireValue,
   WireValueType,
-} from "./protocol";
+} from "./protocol.ts";
 export type { Endpoint };
 
 export const proxyMarker = Symbol("Comlink.proxy");
@@ -106,7 +107,7 @@ export type LocalObject<T> = { [P in keyof T]: LocalProperty<T[P]> };
  */
 export interface ProxyMethods {
   [createEndpoint]: () => Promise<MessagePort>;
-  [releaseProxy]: () => void;
+  [releaseProxy]: () => Promise<void>;
 }
 
 /**
@@ -275,8 +276,8 @@ export const transferHandlers = new Map<
 ]);
 
 export function expose(obj: any, ep: Endpoint = self as any) {
-  ep.addEventListener("message", function callback(ev: MessageEvent) {
-    if (!ev || !ev.data) {
+  ep.addEventListener("message", function callback(ev: Event) {
+    if (!(ev instanceof MessageEvent) || !ev.data) {
       return;
     }
     const { id, type, path } = {
@@ -330,30 +331,24 @@ export function expose(obj: any, ep: Endpoint = self as any) {
       returnValue = { value, [throwMarker]: 0 };
     }
     Promise.resolve(returnValue)
-      .catch((value) => {
-        return { value, [throwMarker]: 0 };
-      })
+      .catch((value) => ({ value, [throwMarker]: 0 }))
       .then((returnValue) => {
         const [wireValue, transferables] = toWireValue(returnValue);
         ep.postMessage({ ...wireValue, id }, transferables);
         if (type === MessageType.RELEASE) {
           // detach and deactive after sending release response above.
-          ep.removeEventListener("message", callback as any);
+          ep.removeEventListener("message", callback);
           closeEndPoint(ep);
         }
       });
-  } as any);
+  });
   if (ep.start) {
     ep.start();
   }
 }
 
-function isMessagePort(endpoint: Endpoint): endpoint is MessagePort {
-  return endpoint.constructor.name === "MessagePort";
-}
-
-function closeEndPoint(endpoint: Endpoint) {
-  if (isMessagePort(endpoint)) endpoint.close();
+function closeEndPoint(endpoint: Closable) {
+  endpoint.close?.();
 }
 
 export function wrap<T>(ep: Endpoint, target?: any): Remote<T> {
@@ -524,13 +519,13 @@ function requestResponseMessage(
 ): Promise<WireValue> {
   return new Promise((resolve) => {
     const id = generateUUID();
-    ep.addEventListener("message", function l(ev: MessageEvent) {
-      if (!ev.data || !ev.data.id || ev.data.id !== id) {
+    ep.addEventListener("message", function l(ev: Event) {
+      if (!(ev instanceof MessageEvent) || !ev.data || ev.data.id !== id) {
         return;
       }
-      ep.removeEventListener("message", l as any);
+      ep.removeEventListener("message", l);
       resolve(ev.data);
-    } as any);
+    });
     if (ep.start) {
       ep.start();
     }
