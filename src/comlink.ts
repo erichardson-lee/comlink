@@ -12,7 +12,7 @@ import {
   PostMessageWithOrigin,
   WireValue,
   WireValueType,
-} from "./protocol";
+} from "./protocol.ts";
 export type { Endpoint };
 
 export const proxyMarker = Symbol("Comlink.proxy");
@@ -66,8 +66,7 @@ type RemoteProperty<T> =
  * Note: This needs to be its own type alias, otherwise it will not distribute over unions. See
  * https://www.typescriptlang.org/docs/handbook/advanced-types.html#distributive-conditional-types
  */
-type LocalProperty<T> = T extends Function | ProxyMarked
-  ? Local<T>
+type LocalProperty<T> = T extends Function | ProxyMarked ? Local<T>
   : Unpromisify<T>;
 
 /**
@@ -77,8 +76,7 @@ export type ProxyOrClone<T> = T extends ProxyMarked ? Remote<T> : T;
 /**
  * Inverse of `ProxyOrClone<T>`.
  */
-export type UnproxyOrClone<T> = T extends RemoteObject<ProxyMarked>
-  ? Local<T>
+export type UnproxyOrClone<T> = T extends RemoteObject<ProxyMarked> ? Local<T>
   : T;
 
 /**
@@ -116,26 +114,24 @@ export interface ProxyMethods {
  */
 export type Remote<T> =
   // Handle properties
-  RemoteObject<T> &
-    // Handle call signature (if present)
-    (T extends (...args: infer TArguments) => infer TReturn
-      ? (
-          ...args: { [I in keyof TArguments]: UnproxyOrClone<TArguments[I]> }
-        ) => Promisify<ProxyOrClone<Unpromisify<TReturn>>>
-      : unknown) &
-    // Handle construct signature (if present)
-    // The return of construct signatures is always proxied (whether marked or not)
-    (T extends { new (...args: infer TArguments): infer TInstance }
-      ? {
-          new (
-            ...args: {
-              [I in keyof TArguments]: UnproxyOrClone<TArguments[I]>;
-            }
-          ): Promisify<Remote<TInstance>>;
+  & RemoteObject<T>
+  & // Handle call signature (if present)
+  (T extends (...args: infer TArguments) => infer TReturn ? (
+      ...args: { [I in keyof TArguments]: UnproxyOrClone<TArguments[I]> }
+    ) => Promisify<ProxyOrClone<Unpromisify<TReturn>>>
+    : unknown)
+  & // Handle construct signature (if present)
+  // The return of construct signatures is always proxied (whether marked or not)
+  (T extends { new (...args: infer TArguments): infer TInstance } ? {
+      new (
+        ...args: {
+          [I in keyof TArguments]: UnproxyOrClone<TArguments[I]>;
         }
-      : unknown) &
-    // Include additional special comlink methods available on the proxy.
-    ProxyMethods;
+      ): Promisify<Remote<TInstance>>;
+    }
+    : unknown)
+  & // Include additional special comlink methods available on the proxy.
+  ProxyMethods;
 
 /**
  * Expresses that a type can be either a sync or async.
@@ -150,26 +146,24 @@ type MaybePromise<T> = Promise<T> | T;
  */
 export type Local<T> =
   // Omit the special proxy methods (they don't need to be supplied, comlink adds them)
-  Omit<LocalObject<T>, keyof ProxyMethods> &
-    // Handle call signatures (if present)
-    (T extends (...args: infer TArguments) => infer TReturn
-      ? (
-          ...args: { [I in keyof TArguments]: ProxyOrClone<TArguments[I]> }
-        ) => // The raw function could either be sync or async, but is always proxied automatically
-        MaybePromise<UnproxyOrClone<Unpromisify<TReturn>>>
-      : unknown) &
-    // Handle construct signature (if present)
-    // The return of construct signatures is always proxied (whether marked or not)
-    (T extends { new (...args: infer TArguments): infer TInstance }
-      ? {
-          new (
-            ...args: {
-              [I in keyof TArguments]: ProxyOrClone<TArguments[I]>;
-            }
-          ): // The raw constructor could either be sync or async, but is always proxied automatically
-          MaybePromise<Local<Unpromisify<TInstance>>>;
+  & Omit<LocalObject<T>, keyof ProxyMethods>
+  & // Handle call signatures (if present)
+  (T extends (...args: infer TArguments) => infer TReturn ? (
+      ...args: { [I in keyof TArguments]: ProxyOrClone<TArguments[I]> }
+    ) => // The raw function could either be sync or async, but is always proxied automatically
+    MaybePromise<UnproxyOrClone<Unpromisify<TReturn>>>
+    : unknown)
+  & // Handle construct signature (if present)
+  // The return of construct signatures is always proxied (whether marked or not)
+  (T extends { new (...args: infer TArguments): infer TInstance } ? {
+      new (
+        ...args: {
+          [I in keyof TArguments]: ProxyOrClone<TArguments[I]>;
         }
-      : unknown);
+      ): // The raw constructor could either be sync or async, but is always proxied automatically
+      MaybePromise<Local<Unpromisify<TInstance>>>;
+    }
+    : unknown);
 
 const isObject = (val: unknown): val is object =>
   (typeof val === "object" && val !== null) || typeof val === "function";
@@ -257,7 +251,7 @@ const throwTransferHandler: TransferHandler<
     if (serialized.isError) {
       throw Object.assign(
         new Error(serialized.value.message),
-        serialized.value
+        serialized.value,
       );
     }
     throw serialized.value;
@@ -277,7 +271,7 @@ export const transferHandlers = new Map<
 
 function isAllowedOrigin(
   allowedOrigins: (string | RegExp)[],
-  origin: string
+  origin: string,
 ): boolean {
   for (const allowedOrigin of allowedOrigins) {
     if (origin === allowedOrigin || allowedOrigin === "*") {
@@ -293,10 +287,10 @@ function isAllowedOrigin(
 export function expose(
   obj: any,
   ep: Endpoint = globalThis as any,
-  allowedOrigins: (string | RegExp)[] = ["*"]
+  allowedOrigins: (string | RegExp)[] = ["*"],
 ) {
-  ep.addEventListener("message", function callback(ev: MessageEvent) {
-    if (!ev || !ev.data) {
+  ep.addEventListener("message", function callback(ev: Event) {
+    if (!(ev instanceof MessageEvent) || !ev || !ev.data) {
       return;
     }
     if (!isAllowedOrigin(allowedOrigins, ev.origin)) {
@@ -354,15 +348,13 @@ export function expose(
       returnValue = { value, [throwMarker]: 0 };
     }
     Promise.resolve(returnValue)
-      .catch((value) => {
-        return { value, [throwMarker]: 0 };
-      })
+      .catch((value) => ({ value, [throwMarker]: 0 }))
       .then((returnValue) => {
         const [wireValue, transferables] = toWireValue(returnValue);
         ep.postMessage({ ...wireValue, id }, transferables);
         if (type === MessageType.RELEASE) {
           // detach and deactive after sending release response above.
-          ep.removeEventListener("message", callback as any);
+          ep.removeEventListener("message", callback);
           closeEndPoint(ep);
           if (finalizer in obj && typeof obj[finalizer] === "function") {
             obj[finalizer]();
@@ -378,9 +370,7 @@ export function expose(
         ep.postMessage({ ...wireValue, id }, transferables);
       });
   } as any);
-  if (ep.start) {
-    ep.start();
-  }
+  ep.start?.();
 }
 
 function isMessagePort(endpoint: Endpoint): endpoint is MessagePort {
@@ -414,15 +404,14 @@ interface FinalizationRegistry<T> {
   register(
     weakItem: object,
     heldValue: T,
-    unregisterToken?: object | undefined
+    unregisterToken?: object | undefined,
   ): void;
   unregister(unregisterToken: object): void;
 }
 declare var FinalizationRegistry: FinalizationRegistry<Endpoint>;
 
 const proxyCounter = new WeakMap<Endpoint, number>();
-const proxyFinalizers =
-  "FinalizationRegistry" in globalThis &&
+const proxyFinalizers = "FinalizationRegistry" in globalThis &&
   new FinalizationRegistry((ep: Endpoint) => {
     const newCount = (proxyCounter.get(ep) || 0) - 1;
     proxyCounter.set(ep, newCount);
@@ -448,7 +437,7 @@ function unregisterProxy(proxy: object) {
 function createProxy<T>(
   ep: Endpoint,
   path: (string | number | symbol)[] = [],
-  target: object = function () {}
+  target: object = function () {},
 ): Remote<T> {
   let isProxyReleased = false;
   const proxy = new Proxy(target, {
@@ -485,7 +474,7 @@ function createProxy<T>(
           path: [...path, prop].map((p) => p.toString()),
           value,
         },
-        transferables
+        transferables,
       ).then(fromWireValue) as any;
     },
     apply(_target, _thisArg, rawArgumentList) {
@@ -508,7 +497,7 @@ function createProxy<T>(
           path: path.map((p) => p.toString()),
           argumentList,
         },
-        transferables
+        transferables,
       ).then(fromWireValue);
     },
     construct(_target, rawArgumentList) {
@@ -521,7 +510,7 @@ function createProxy<T>(
           path: path.map((p) => p.toString()),
           argumentList,
         },
-        transferables
+        transferables,
       ).then(fromWireValue);
     },
   });
@@ -551,7 +540,7 @@ export function proxy<T extends {}>(obj: T): T & ProxyMarked {
 export function windowEndpoint(
   w: PostMessageWithOrigin,
   context: EventSource = globalThis,
-  targetOrigin = "*"
+  targetOrigin = "*",
 ): Endpoint {
   return {
     postMessage: (msg: any, transferables: Transferable[]) =>
@@ -596,17 +585,17 @@ function fromWireValue(value: WireValue): any {
 function requestResponseMessage(
   ep: Endpoint,
   msg: Message,
-  transfers?: Transferable[]
+  transfers?: Transferable[],
 ): Promise<WireValue> {
   return new Promise((resolve) => {
     const id = generateUUID();
-    ep.addEventListener("message", function l(ev: MessageEvent) {
-      if (!ev.data || !ev.data.id || ev.data.id !== id) {
+    ep.addEventListener("message", function l(ev: Event) {
+      if (!(ev instanceof MessageEvent) || !ev.data || ev.data.id !== id) {
         return;
       }
-      ep.removeEventListener("message", l as any);
+      ep.removeEventListener("message", l);
       resolve(ev.data);
-    } as any);
+    });
     if (ep.start) {
       ep.start();
     }
