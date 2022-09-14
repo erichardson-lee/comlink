@@ -11,7 +11,7 @@ import {
   MessageType,
   PostMessageWithOrigin,
   WireValue,
-  WireValueType,
+  WireValueType
 } from "./protocol";
 export type { Endpoint };
 
