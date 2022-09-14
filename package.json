@@ -21,6 +21,12 @@
     "name": "Surma",
     "email": "surma@google.com"
   },
+  "contributors": [
+    {
+      "name": "Vicary Archangel",
+      "email": "vicary.archangel@member.mensa.org"
+    }
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/GoogleChromeLabs/comlink.git"
