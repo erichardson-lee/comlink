@@ -1,5 +1,9 @@
 # Comlink
 
+**Disclaimer:** This is a fork from the original [comlink](https://github.com/GoogleChromeLabs/comlink) by Surma, who unfortunately went dormant after leaving Google. I have made modifications to work with `deno run`, but `deno test` will fail in its current state, see [#598](https://github.com/GoogleChromeLabs/comlink/issues/598) for more details.
+
+---
+
 Comlink makes [WebWorkers][webworker] enjoyable. Comlink is a **tiny library (1.1kB)**, that removes the mental barrier of thinking about `postMessage` and hides the fact that you are working with workers.
 
 At a more abstract level it is an RPC implementation for `postMessage` and [ES6 Proxies][es6 proxy].
