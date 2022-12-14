@@ -1,6 +1,6 @@
 # Comlink
 
-**Disclaimer:** This is a fork from the original [comlink](https://github.com/GoogleChromeLabs/comlink) by Surma, who unfortunately went dormant after leaving Google. I have made modifications to work with `deno run`, but `deno test` will fail in its current state, see [#598](https://github.com/GoogleChromeLabs/comlink/issues/598) for more details.
+**Disclaimer:** This is a fork from the original [comlink](https://github.com/GoogleChromeLabs/comlink) by Surma, who unfortunately went dormant after leaving Google. I have made modifications to work with `deno run` and `deno test`.
 
 ---
 
