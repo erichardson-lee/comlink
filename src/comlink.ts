@@ -5,7 +5,6 @@
  */
 
 import {
-  Closable,
   Endpoint,
   EventSource,
   Message,
@@ -203,6 +202,9 @@ export interface TransferHandler<T, S> {
   deserialize(value: S): T;
 }
 
+/** Throwaway MessageChannels via proxy() */
+const proxyMap = new WeakMap<MessagePort, MessagePort>();
+
 /**
  * Internal transfer handle to handle objects marked to proxy.
  */
@@ -211,6 +213,7 @@ const proxyTransferHandler: TransferHandler<object, MessagePort> = {
     isObject(val) && (val as ProxyMarked)[proxyMarker],
   serialize(obj) {
     const { port1, port2 } = new MessageChannel();
+    proxyMap.set(port2, port1);
     expose(obj, port1);
     return [port2, [port2]];
   },
@@ -338,17 +341,11 @@ export function expose(obj: any, ep: Endpoint = self as any) {
         if (type === MessageType.RELEASE) {
           // detach and deactive after sending release response above.
           ep.removeEventListener("message", callback);
-          closeEndPoint(ep);
+          ep.close?.();
         }
       });
   });
-  if (ep.start) {
-    ep.start();
-  }
-}
-
-function closeEndPoint(endpoint: Closable) {
-  endpoint.close?.();
+  ep.start?.();
 }
 
 export function wrap<T>(ep: Endpoint, target?: any): Remote<T> {
@@ -376,7 +373,7 @@ function createProxy<T>(
             type: MessageType.RELEASE,
             path: path.map((p) => p.toString()),
           }).then(() => {
-            closeEndPoint(ep);
+            ep.close?.();
             isProxyReleased = true;
           });
         };
@@ -519,16 +516,32 @@ function requestResponseMessage(
 ): Promise<WireValue> {
   return new Promise((resolve) => {
     const id = generateUUID();
+    const openPorts =
+      msg.type === MessageType.APPLY
+        ? msg.argumentList.reduce<MessagePort[]>((prev, v) => {
+            if (
+              v.type === "HANDLER" &&
+              v.name === "proxy" &&
+              v.value instanceof MessagePort
+            ) {
+              return [...prev, v.value];
+            } else {
+              return prev;
+            }
+          }, [])
+        : [];
+
     ep.addEventListener("message", function l(ev: Event) {
       if (!(ev instanceof MessageEvent) || !ev.data || ev.data.id !== id) {
         return;
       }
+      for (const port of openPorts) {
+        proxyMap.get(port)?.close();
+      }
       ep.removeEventListener("message", l);
       resolve(ev.data);
     });
-    if (ep.start) {
-      ep.start();
-    }
+    ep.start?.();
     ep.postMessage({ id, ...msg }, transfers);
   });
 }
