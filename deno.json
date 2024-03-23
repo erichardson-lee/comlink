@@ -1,3 +1,6 @@
 {
-  "importMap": "./import_map.json"
+  "imports": {
+    "std/": "https://deno.land/std@0.167.0/"
+  },
+  "lock": false
 }
